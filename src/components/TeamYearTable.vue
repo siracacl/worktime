@@ -32,10 +32,10 @@
                         <td v-for="m in member.months"
                             :key="m.month"
                             class="col-month">
-                            <span v-if="m.vacationDays > 0" class="vacation-days">{{ m.vacationDays }}</span>
+                            <span v-if="m.vacationDays > 0" class="vacation-days">{{ formatVacationDays(m.vacationDays) }}</span>
                         </td>
                         <td class="col-total">
-                            <strong>{{ member.vacationStats.used }}/{{ member.vacationStats.total }}</strong>
+                            <strong>{{ formatVacationDays(member.vacationStats.used) }}/{{ formatVacationDays(member.vacationStats.total) }}</strong>
                         </td>
                     </tr>
                     <!-- Row 2: Overtime -->
@@ -113,6 +113,7 @@ import ClockOutlineIcon from 'vue-material-design-icons/ClockOutline.vue'
 import CloseCircleIcon from 'vue-material-design-icons/CloseCircle.vue'
 import { getMonthNameShort, getMonthName } from '../utils/dateUtils.js'
 import { formatMinutes } from '../utils/timeUtils.js'
+import { formatVacationDays } from '../utils/formatters.js'
 import TimeEntryService from '../services/TimeEntryService.js'
 import { showSuccess, showError } from '@nextcloud/dialogs'
 
@@ -151,6 +152,7 @@ export default {
     methods: {
         getMonthNameShort,
         getMonthName,
+        formatVacationDays,
         formatOvertimeShort(minutes) {
             if (minutes === null || minutes === undefined) return '--'
             const sign = minutes >= 0 ? '+' : ''

@@ -13,6 +13,7 @@ use OCA\WorkTime\Db\TimeEntryMapper;
 use OCA\WorkTime\Service\AbsenceService;
 use OCA\WorkTime\Service\EmployeeService;
 use OCA\WorkTime\Service\HolidayService;
+use OCA\WorkTime\Service\OvertimePayoutService;
 use OCA\WorkTime\Service\PdfService;
 use OCA\WorkTime\Service\PermissionService;
 use OCA\WorkTime\Service\TimeEntryService;
@@ -51,6 +52,7 @@ class ProportionalOvertimeTodayTest extends TestCase {
 			$this->createMock(PdfService::class),
 			$schedule,
 			$this->createMock(YearlyCarryoverService::class),
+			$this->createMock(OvertimePayoutService::class),
 		) extends ReportController {
 			public string $pinnedToday = '';
 			protected function currentDate(): DateTime {

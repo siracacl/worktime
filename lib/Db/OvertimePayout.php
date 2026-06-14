@@ -1,0 +1,92 @@
+<?php
+
+/**
+ * SPDX-FileCopyrightText: 2026 Axel Deffner <axel@cpcmomentum.com>
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+declare(strict_types=1);
+
+namespace OCA\WorkTime\Db;
+
+use DateTime;
+use JsonSerializable;
+use OCP\AppFramework\Db\Entity;
+
+/**
+ * A paid-out chunk of overtime. It reduces the running flextime balance
+ * (Gleitzeitkonto) from its effective month (year + month) onward.
+ *
+ * @method int getId()
+ * @method void setId(int $id)
+ * @method int getEmployeeId()
+ * @method void setEmployeeId(int $employeeId)
+ * @method int getYear()
+ * @method void setYear(int $year)
+ * @method int getMonth()
+ * @method void setMonth(int $month)
+ * @method int getMinutes()
+ * @method void setMinutes(int $minutes)
+ * @method string|null getNote()
+ * @method void setNote(?string $note)
+ * @method string getCreatedBy()
+ * @method void setCreatedBy(string $createdBy)
+ * @method DateTime getCreatedAt()
+ * @method void setCreatedAt(DateTime $createdAt)
+ * @method DateTime getUpdatedAt()
+ * @method void setUpdatedAt(DateTime $updatedAt)
+ * @method DateTime|null getCancelledAt()
+ * @method void setCancelledAt(?DateTime $cancelledAt)
+ * @method string|null getCancelledBy()
+ * @method void setCancelledBy(?string $cancelledBy)
+ */
+class OvertimePayout extends Entity implements JsonSerializable {
+
+    protected int $employeeId = 0;
+    protected int $year = 0;
+    protected int $month = 0;
+    protected int $minutes = 0;
+    protected ?string $note = null;
+    protected string $createdBy = '';
+    protected ?DateTime $createdAt = null;
+    protected ?DateTime $updatedAt = null;
+    protected ?DateTime $cancelledAt = null;
+    protected ?string $cancelledBy = null;
+
+    public function __construct() {
+        $this->addType('id', 'integer');
+        $this->addType('employeeId', 'integer');
+        $this->addType('year', 'integer');
+        $this->addType('month', 'integer');
+        $this->addType('minutes', 'integer');
+        $this->addType('createdAt', 'datetime');
+        $this->addType('updatedAt', 'datetime');
+        $this->addType('cancelledAt', 'datetime');
+    }
+
+    public function isCancelled(): bool {
+        return $this->cancelledAt !== null;
+    }
+
+    public function getHours(): float {
+        return round($this->minutes / 60, 2);
+    }
+
+    public function jsonSerialize(): array {
+        return [
+            'id' => $this->getId(),
+            'employeeId' => $this->getEmployeeId(),
+            'year' => $this->getYear(),
+            'month' => $this->getMonth(),
+            'minutes' => $this->getMinutes(),
+            'hours' => $this->getHours(),
+            'note' => $this->getNote(),
+            'createdBy' => $this->getCreatedBy(),
+            'createdAt' => $this->getCreatedAt()?->format('Y-m-d H:i:s'),
+            'updatedAt' => $this->getUpdatedAt()?->format('Y-m-d H:i:s'),
+            'cancelledAt' => $this->getCancelledAt()?->format('Y-m-d H:i:s'),
+            'cancelledBy' => $this->getCancelledBy(),
+            'isCancelled' => $this->isCancelled(),
+        ];
+    }
+}

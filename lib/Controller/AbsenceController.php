@@ -295,7 +295,7 @@ class AbsenceController extends BaseController {
             $stats = $this->absenceService->getVacationStats(
                 $employeeId,
                 $year,
-                $baseEntitlement + (int)round($carryover)
+                $baseEntitlement + $carryover
             );
             $stats['entitlement'] = $baseEntitlement;
             $stats['carryover'] = $carryover;

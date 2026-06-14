@@ -57,6 +57,15 @@
                         {{ t('worktime', 'PDF Monatsbericht') }}
                     </NcActionButton>
                 </NcActions>
+
+                <NcButton v-if="isYearMode && canManageEmployees"
+                    type="secondary"
+                    @click="openPayoutModal">
+                    <template #icon>
+                        <CashMinusIcon :size="20" />
+                    </template>
+                    {{ t('worktime', 'Überstunden auszahlen') }}
+                </NcButton>
             </div>
         </div>
 
@@ -93,7 +102,10 @@
             :months="yearlyMonths"
             :year="overviewYear"
             :carryover-minutes="carryoverMinutes"
-            @select-month="selectMonth" />
+            :payouts="payouts"
+            :can-manage="canManageEmployees"
+            @select-month="selectMonth"
+            @cancel-payout="cancelPayout" />
 
         <!-- Monatsansicht: Liste/Kalender + Detail-Panel -->
         <div v-else class="zlayout" :class="{ narrow: isNarrow }">
@@ -129,6 +141,42 @@
                     @refresh="loadData" />
             </div>
         </NcModal>
+
+        <NcModal v-if="showPayoutModal"
+            size="small"
+            @close="showPayoutModal = false">
+            <div class="payout-modal">
+                <h3>{{ t('worktime', 'Überstunden auszahlen') }}</h3>
+                <p class="payout-modal__hint">
+                    {{ t('worktime', 'Reduziert das Gleitzeitkonto ab dem gewählten Monat. Aktueller Saldo: {hours} h', { hours: payoutBalanceHours }) }}
+                </p>
+                <label class="payout-field">
+                    <span>{{ t('worktime', 'Stichmonat') }}</span>
+                    <select v-model.number="payoutForm.month">
+                        <option v-for="m in 12" :key="m" :value="m">{{ getMonthName(m) }} {{ overviewYear }}</option>
+                    </select>
+                </label>
+                <label class="payout-field">
+                    <span>{{ t('worktime', 'Auszuzahlende Stunden') }}</span>
+                    <input v-model="payoutForm.hours"
+                        type="number"
+                        step="0.25"
+                        min="0">
+                </label>
+                <label class="payout-field">
+                    <span>{{ t('worktime', 'Grund') }}</span>
+                    <input v-model="payoutForm.note"
+                        type="text"
+                        :placeholder="t('worktime', 'z. B. Auszahlung Überstunden')">
+                </label>
+                <div class="payout-modal__actions">
+                    <NcButton @click="showPayoutModal = false">{{ t('worktime', 'Abbrechen') }}</NcButton>
+                    <NcButton type="primary" :disabled="payoutSaving" @click="submitPayout">
+                        {{ t('worktime', 'Speichern') }}
+                    </NcButton>
+                </div>
+            </div>
+        </NcModal>
     </div>
 </template>
 
@@ -144,10 +192,11 @@ import FilePdfBox from 'vue-material-design-icons/FilePdfBox.vue'
 import FormatListBulletedIcon from 'vue-material-design-icons/FormatListBulleted.vue'
 import CalendarIcon from 'vue-material-design-icons/Calendar.vue'
 import ChartBarIcon from 'vue-material-design-icons/ChartBar.vue'
+import CashMinusIcon from 'vue-material-design-icons/CashMinus.vue'
 import { mapGetters, mapActions, mapState } from 'vuex'
 import { showSuccess, showError } from '@nextcloud/dialogs'
 import { confirmAction } from '../utils/errorHandler.js'
-import { getCurrentYear, getCurrentMonth, getMonthDays, getToday, formatDateISO, getLocale } from '../utils/dateUtils.js'
+import { getCurrentYear, getCurrentMonth, getMonthName, getMonthDays, getToday, formatDateISO, getLocale } from '../utils/dateUtils.js'
 import { getAbsenceTypeLabel } from '../utils/formatters.js'
 import MonthPicker from '../components/MonthPicker.vue'
 import YearPicker from '../components/YearPicker.vue'
@@ -159,6 +208,7 @@ import DayDetailPanel from '../components/DayDetailPanel.vue'
 import ReportService from '../services/ReportService.js'
 import AbsenceService from '../services/AbsenceService.js'
 import TimeEntryService from '../services/TimeEntryService.js'
+import OvertimePayoutService from '../services/OvertimePayoutService.js'
 
 export default {
     name: 'TimeTrackingView',
@@ -174,6 +224,7 @@ export default {
         FormatListBulletedIcon,
         CalendarIcon,
         ChartBarIcon,
+        CashMinusIcon,
         MonthPicker,
         YearPicker,
         OvertimeSummary,
@@ -192,6 +243,11 @@ export default {
             vacationTotal: null,
             yearlyMonths: [],
             carryoverMinutes: 0,
+            payoutMinutes: 0,
+            payouts: [],
+            showPayoutModal: false,
+            payoutSaving: false,
+            payoutForm: { month: getCurrentMonth(), hours: '', note: '' },
             overviewYear: getCurrentYear(),
             layoutMode: (['list', 'calendar', 'year'].includes(localStorage.getItem('worktime_tracking_layout'))
                 ? localStorage.getItem('worktime_tracking_layout')
@@ -204,7 +260,7 @@ export default {
     computed: {
         ...mapState('timeEntries', ['selectedMonth']),
         ...mapGetters('timeEntries', ['timeEntries', 'loading']),
-        ...mapGetters('permissions', ['employeeId', 'approvalRequired']),
+        ...mapGetters('permissions', ['employeeId', 'approvalRequired', 'canManageEmployees']),
         ...mapGetters('employees', ['currentEmployee']),
         ...mapGetters('projects', ['activeProjects']),
         projects() {
@@ -224,7 +280,11 @@ export default {
             return this.pastYearlyMonths.reduce((sum, m) => sum + (m.actualMinutes || 0), 0)
         },
         yearOvertimeMinutes() {
-            return this.pastYearlyMonths.reduce((sum, m) => sum + (m.overtimeMinutes || 0), 0) + (this.carryoverMinutes || 0)
+            return this.pastYearlyMonths.reduce((sum, m) => sum + (m.overtimeMinutes || 0), 0)
+                + (this.carryoverMinutes || 0) - (this.payoutMinutes || 0)
+        },
+        payoutBalanceHours() {
+            return (this.yearOvertimeMinutes / 60).toLocaleString(getLocale(), { maximumFractionDigits: 1 })
         },
         pastYearlyMonths() {
             const cY = getCurrentYear()
@@ -347,6 +407,7 @@ export default {
     },
     methods: {
         ...mapActions('timeEntries', ['fetchTimeEntries', 'setSelectedMonth']),
+        getMonthName,
         updateIsNarrow() {
             this.isNarrow = window.innerWidth <= 920
         },
@@ -391,8 +452,59 @@ export default {
                 const overtime = await ReportService.getOvertime(this.employeeId, this.overviewYear)
                 this.yearlyMonths = overtime?.monthly || []
                 this.carryoverMinutes = overtime?.carryoverMinutes || 0
+                this.payoutMinutes = overtime?.payoutMinutes || 0
+                this.payouts = await OvertimePayoutService.list(this.employeeId, this.overviewYear) || []
             } catch (error) {
                 console.error('Failed to load yearly overview:', error)
+            }
+        },
+        openPayoutModal() {
+            // Prefill with the current balance so the default action zeroes the account.
+            const balanceHours = this.yearOvertimeMinutes / 60
+            this.payoutForm = {
+                month: getCurrentYear() === this.overviewYear ? getCurrentMonth() : 12,
+                hours: balanceHours > 0 ? Number(balanceHours.toFixed(2)) : '',
+                note: '',
+            }
+            this.showPayoutModal = true
+        },
+        async submitPayout() {
+            const hours = Number(this.payoutForm.hours)
+            if (!hours || Number.isNaN(hours) || hours <= 0) {
+                showError(this.t('worktime', 'Bitte einen positiven Stundenbetrag eingeben.'))
+                return
+            }
+            if (!this.payoutForm.note || !this.payoutForm.note.trim()) {
+                showError(this.t('worktime', 'Bitte einen Grund angeben.'))
+                return
+            }
+            this.payoutSaving = true
+            try {
+                await OvertimePayoutService.create(
+                    this.employeeId,
+                    this.overviewYear,
+                    this.payoutForm.month,
+                    Math.round(hours * 60),
+                    this.payoutForm.note.trim(),
+                )
+                this.showPayoutModal = false
+                await this.loadOvertime()
+                showSuccess(this.t('worktime', 'Auszahlung gespeichert.'))
+            } catch (error) {
+                showError(error.message || this.t('worktime', 'Speichern fehlgeschlagen.'))
+            } finally {
+                this.payoutSaving = false
+            }
+        },
+        async cancelPayout(id) {
+            const confirmed = await confirmAction(this.t('worktime', 'Auszahlung wirklich stornieren?'))
+            if (!confirmed) return
+            try {
+                await OvertimePayoutService.cancel(id)
+                await this.loadOvertime()
+                showSuccess(this.t('worktime', 'Auszahlung storniert.'))
+            } catch (error) {
+                showError(error.message || this.t('worktime', 'Stornieren fehlgeschlagen.'))
             }
         },
         async loadStatistics() {
@@ -415,7 +527,7 @@ export default {
             try {
                 const stats = await AbsenceService.getVacationStats(this.employeeId, this.selectedMonth.year)
                 this.vacationRemaining = stats?.remaining ?? null
-                this.vacationCarryover = Math.round(stats?.carryover ?? 0)
+                this.vacationCarryover = stats?.carryover ?? 0
                 this.vacationTotal = stats?.total ?? null
             } catch (error) {
                 console.error('Failed to load vacation stats:', error)
@@ -586,5 +698,43 @@ export default {
 
 .modal-panel {
     padding: 22px;
+}
+
+.payout-modal {
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.payout-modal h3 {
+    margin: 0;
+}
+
+.payout-modal__hint {
+    margin: 0;
+    font-size: 13px;
+    color: var(--color-text-maxcontrast);
+}
+
+.payout-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text-maxcontrast);
+}
+
+.payout-field select,
+.payout-field input {
+    width: 100%;
+}
+
+.payout-modal__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 4px;
 }
 </style>

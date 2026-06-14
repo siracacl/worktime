@@ -22,7 +22,7 @@
             <section v-if="vacationStats" class="konto-box">
                 <h3>{{ t('worktime', 'Urlaub') }}</h3>
                 <div class="konto-hero" :class="vacationStats.remaining >= 0 ? 'konto-hero--pos' : 'konto-hero--neg'">
-                    {{ vacationStats.remaining }} <small>/ {{ vacationStats.total }} {{ t('worktime', 'Tage übrig') }}</small>
+                    {{ fmtDays(vacationStats.remaining) }} <small>/ {{ fmtDays(vacationStats.total) }} {{ t('worktime', 'Tage übrig') }}</small>
                 </div>
                 <div class="vac-progress"
                     role="progressbar"
@@ -32,20 +32,20 @@
                     <div class="vac-progress__fill" :style="{ width: vacationUsedPercent + '%' }" />
                 </div>
                 <div class="konto-barlab">
-                    {{ t('worktime', '{used} von {total} Tagen genommen', { used: vacationStats.used, total: vacationStats.total }) }}
+                    {{ t('worktime', '{used} von {total} Tagen genommen', { used: fmtDays(vacationStats.used), total: fmtDays(vacationStats.total) }) }}
                 </div>
                 <div class="konto-substats">
                     <div class="substat">
                         <span class="substat__l">{{ t('worktime', 'Anspruch') }}</span>
-                        <span class="substat__v">{{ vacationBase }}</span>
+                        <span class="substat__v">{{ fmtDays(vacationBase) }}</span>
                     </div>
                     <div class="substat">
                         <span class="substat__l">{{ t('worktime', 'Genommen') }}</span>
-                        <span class="substat__v">{{ vacationStats.used }}<small v-if="vacationStats.pending > 0"> {{ t('worktime', '+ {days} beantragt', { days: vacationStats.pending }) }}</small></span>
+                        <span class="substat__v">{{ fmtDays(vacationStats.used) }}<small v-if="vacationStats.pending > 0"> {{ t('worktime', '+ {days} beantragt', { days: fmtDays(vacationStats.pending) }) }}</small></span>
                     </div>
                     <div class="substat">
                         <span class="substat__l">{{ t('worktime', 'Übertrag Vorjahr') }}</span>
-                        <span class="substat__v">{{ vacationCarryover !== 0 ? vacationCarryover : '–' }}</span>
+                        <span class="substat__v">{{ vacationCarryover !== 0 ? fmtDays(vacationCarryover) : '–' }}</span>
                     </div>
                 </div>
             </section>
@@ -212,6 +212,7 @@ import AbsenceTimeline from '../components/AbsenceTimeline.vue'
 import InfoIcon from '../components/InfoIcon.vue'
 import { getCurrentYear, getCurrentMonth } from '../utils/dateUtils.js'
 import { formatMinutes } from '../utils/timeUtils.js'
+import { formatVacationDays } from '../utils/formatters.js'
 import { confirmAction, showErrorMessage, showSuccessMessage } from '../utils/errorHandler.js'
 import ReportService from '../services/ReportService.js'
 import AbsenceService from '../services/AbsenceService.js'
@@ -264,11 +265,11 @@ export default {
             return [...this.absences].sort((a, b) => b.startDate.localeCompare(a.startDate))
         },
         vacationCarryover() {
-            return Math.round(this.vacationStats?.carryover ?? 0)
+            return this.vacationStats?.carryover ?? 0
         },
         vacationBase() {
             if (!this.vacationStats) return 0
-            return Math.round((this.vacationStats.total ?? 0) - (this.vacationStats.carryover ?? 0))
+            return (this.vacationStats.total ?? 0) - (this.vacationStats.carryover ?? 0)
         },
         overtimeSaldoMin() {
             return this.overtime?.totalOvertimeMinutes ?? 0
@@ -308,6 +309,9 @@ export default {
         onYearChange(year) {
             this.currentYear = year
             this.loadData()
+        },
+        fmtDays(value) {
+            return formatVacationDays(value)
         },
         async loadData() {
             await Promise.all([

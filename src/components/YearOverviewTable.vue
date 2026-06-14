@@ -57,13 +57,28 @@
                         </span>
                     </td>
                 </tr>
+                <tr v-for="p in visiblePayouts" :key="'payout-' + p.id" class="payout-row">
+                    <td>
+                        {{ t('worktime', 'Auszahlung {month}', { month: getMonthName(p.month) }) }}
+                        <span v-if="p.note" class="payout-note">– {{ p.note }}</span>
+                    </td>
+                    <td></td>
+                    <td></td>
+                    <td class="text-right num">
+                        <span class="negative">{{ formatOvertime(-p.minutes) }}</span>
+                        <button v-if="canManage"
+                            class="payout-cancel"
+                            :title="t('worktime', 'Auszahlung stornieren')"
+                            @click="$emit('cancel-payout', p.id)">×</button>
+                    </td>
+                </tr>
                 <tr class="total-row">
                     <td>{{ t('worktime', 'Gesamt bis heute') }}</td>
                     <td class="text-right num">{{ formatMin(totalTarget) }}</td>
                     <td class="text-right num">{{ formatMin(totalActual) }}</td>
                     <td class="text-right num">
-                        <span :class="overtimeClass(totalOvertime + carryoverMinutes)">
-                            {{ formatOvertime(totalOvertime + carryoverMinutes) }}
+                        <span :class="overtimeClass(balanceOvertime)">
+                            {{ formatOvertime(balanceOvertime) }}
                         </span>
                     </td>
                 </tr>
@@ -98,8 +113,16 @@ export default {
             type: Number,
             default: 0,
         },
+        payouts: {
+            type: Array,
+            default: () => [],
+        },
+        canManage: {
+            type: Boolean,
+            default: false,
+        },
     },
-    emits: ['select-month'],
+    emits: ['select-month', 'cancel-payout'],
     computed: {
         currentYear() {
             return getCurrentYear()
@@ -130,6 +153,15 @@ export default {
         },
         totalOvertime() {
             return this.pastMonths.reduce((sum, m) => sum + (m.overtimeMinutes || 0), 0)
+        },
+        visiblePayouts() {
+            return this.payouts.filter(p => !this.isFutureMonth(p.month))
+        },
+        totalPayout() {
+            return this.visiblePayouts.reduce((sum, p) => sum + (p.minutes || 0), 0)
+        },
+        balanceOvertime() {
+            return this.totalOvertime + this.carryoverMinutes - this.totalPayout
         },
     },
     methods: {
@@ -268,12 +300,33 @@ export default {
     font-variant-numeric: tabular-nums;
 }
 
-.year-table tfoot .carryover-row td {
+.year-table tfoot .carryover-row td,
+.year-table tfoot .payout-row td {
     font-weight: 500;
     font-style: italic;
     color: var(--color-text-maxcontrast);
     background: var(--color-main-background);
     border-top: 1px solid var(--color-border-light, var(--color-border));
+}
+
+.payout-note {
+    font-style: normal;
+    font-weight: 400;
+}
+
+.payout-cancel {
+    margin-left: 8px;
+    border: none;
+    background: transparent;
+    color: var(--color-text-maxcontrast);
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 0 4px;
+}
+
+.payout-cancel:hover {
+    color: var(--color-error-text);
 }
 
 .positive {

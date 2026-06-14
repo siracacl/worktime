@@ -29,7 +29,7 @@
             <!-- Urlaub: Rest / Anspruch -->
             <div v-if="vacationTotal !== null" class="kpi-card">
                 <div class="kpi-lab">{{ t('worktime', 'Urlaub {year}', { year }) }}</div>
-                <div class="kpi-num pos">{{ vacationRemaining ?? 0 }} <small>/ {{ vacationTotal }} {{ t('worktime', 'Tage übrig') }}</small></div>
+                <div class="kpi-num pos">{{ formatVacationDays(vacationRemaining ?? 0) }} <small>/ {{ formatVacationDays(vacationTotal) }} {{ t('worktime', 'Tage übrig') }}</small></div>
                 <div v-if="vacationSub" class="kpi-sub">{{ vacationSub }}</div>
             </div>
 
@@ -95,6 +95,7 @@ import NcButton from '@nextcloud/vue/dist/Components/NcButton.js'
 import ChevronDown from 'vue-material-design-icons/ChevronDown.vue'
 import ChevronUp from 'vue-material-design-icons/ChevronUp.vue'
 import { formatMinutesWithUnit, formatMinutes as formatHM } from '../utils/timeUtils.js'
+import { formatVacationDays } from '../utils/formatters.js'
 import { getMonthName } from '../utils/dateUtils.js'
 import InfoIcon from '../components/InfoIcon.vue'
 
@@ -197,12 +198,13 @@ export default {
         },
         vacationSub() {
             if (this.vacationCarryover > 0) {
-                return this.t('worktime', 'inkl. {days} Tage Übertrag', { days: this.vacationCarryover })
+                return this.t('worktime', 'inkl. {days} Tage Übertrag', { days: this.formatVacationDays(this.vacationCarryover) })
             }
             return ''
         },
     },
     methods: {
+        formatVacationDays,
         formatMinutes(minutes) {
             return formatMinutesWithUnit(minutes)
         },

@@ -321,30 +321,58 @@ class WorkScheduleService {
     }
 
     /**
-     * Get vacation days entitlement for a year.
-     * Pro-rates across multiple schedules if profile changes occur mid-year.
+     * Get the vacation days entitlement for a year, pro-rated for part-time work
+     * and partial-year employment.
+     *
+     * Formula per full calendar month of employment:
+     *   annualVacationDays × (workingDaysPerWeek / 5) × (1 / 12)
+     *
+     * - Part-time factor: the stored vacationDays is treated as a full-time
+     *   (5-day week) baseline and scaled by the schedule's working days per week.
+     * - Twelfthing (§5 BUrlG): only calendar months that are *fully* covered by
+     *   the employment period [entryDate, exitDate] count, each as 1/12.
+     * - A mid-year schedule change is honoured by evaluating the schedule per month.
+     *
+     * The result is rounded to the nearest half day.
      */
-    public function getVacationDaysForYear(int $employeeId, int $year): int {
-        $jan1 = new DateTime("$year-01-01");
-        $dec31 = new DateTime("$year-12-31");
-        $segments = $this->buildSegments($employeeId, $jan1, $dec31);
-
-        // Nur ein Profil das ganze Jahr → direkt zurueckgeben
-        if (count($segments) === 1) {
-            return $segments[0]['schedule']->getVacationDays();
+    public function getVacationDaysForYear(int $employeeId, int $year): float {
+        $entryDate = null;
+        $exitDate = null;
+        try {
+            $employee = $this->employeeMapper->find($employeeId);
+            $entryDate = $employee->getEntryDate();
+            $exitDate = $employee->getExitDate();
+        } catch (DoesNotExistException) {
+            // No employee record → treat as employed the whole year.
         }
 
-        // Mehrere Profile → anteilig berechnen
-        $daysInYear = (int)$jan1->diff($dec31)->days + 1;
-        $totalDays = 0.0;
+        $total = 0.0;
 
-        foreach ($segments as $segment) {
-            $daysInSegment = (int)$segment['start']->diff($segment['end'])->days + 1;
-            $fraction = $daysInSegment / $daysInYear;
-            $totalDays += $segment['schedule']->getVacationDays() * $fraction;
+        for ($month = 1; $month <= 12; $month++) {
+            $monthStart = new DateTime("$year-$month-01");
+            $monthEnd = (clone $monthStart)->modify('last day of this month');
+
+            // Only count calendar months fully covered by the employment period.
+            if ($entryDate !== null && $entryDate > $monthStart) {
+                continue;
+            }
+            if ($exitDate !== null && $exitDate < $monthEnd) {
+                continue;
+            }
+
+            $schedule = $this->getScheduleForDate($employeeId, $monthStart);
+            $partTimeFactor = $schedule->getWorkingDaysPerWeek() / 5.0;
+            $total += $schedule->getVacationDays() * $partTimeFactor / 12.0;
         }
 
-        return (int)round($totalDays);
+        return $this->roundToHalf($total);
+    }
+
+    /**
+     * Round a value to the nearest half (0.0, 0.5, 1.0, ...).
+     */
+    private function roundToHalf(float $value): float {
+        return round($value * 2) / 2;
     }
 
     /**

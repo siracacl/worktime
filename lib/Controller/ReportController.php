@@ -18,6 +18,7 @@ use OCA\WorkTime\Service\AbsenceService;
 use OCA\WorkTime\Service\EmployeeService;
 use OCA\WorkTime\Service\HolidayService;
 use OCA\WorkTime\Service\PdfService;
+use OCA\WorkTime\Service\OvertimePayoutService;
 use OCA\WorkTime\Service\PermissionService;
 use OCA\WorkTime\Service\TimeEntryService;
 use OCA\WorkTime\Service\WorkScheduleService;
@@ -46,6 +47,7 @@ class ReportController extends BaseController {
         private PdfService $pdfService,
         private WorkScheduleService $workScheduleService,
         private YearlyCarryoverService $carryoverService,
+        private OvertimePayoutService $payoutService,
     ) {
         parent::__construct($request, $userId);
     }
@@ -204,6 +206,24 @@ class ReportController extends BaseController {
         $allTimeEntries = $this->timeEntryMapper->findByEmployeeIdsAndYear($employeeIds, $year);
         $allAbsences = $this->absenceMapper->findByEmployeeIdsAndYear($employeeIds, $year);
 
+        // Paid-out overtime per employee, only counting effective months that are
+        // not in the future (consistent with the summed monthly overtime below).
+        $now = new DateTime();
+        $currentYear = (int)$now->format('Y');
+        if ($year < $currentYear) {
+            $payoutCutoffMonth = 12;
+        } elseif ($year > $currentYear) {
+            $payoutCutoffMonth = 0;
+        } else {
+            $payoutCutoffMonth = (int)$now->format('n');
+        }
+        $payoutByEmployee = [];
+        foreach ($this->payoutService->findActiveByEmployeeIdsAndYear($employeeIds, $year) as $payout) {
+            if ($payout->getMonth() <= $payoutCutoffMonth) {
+                $payoutByEmployee[$payout->getEmployeeId()] = ($payoutByEmployee[$payout->getEmployeeId()] ?? 0) + $payout->getMinutes();
+            }
+        }
+
         // Batch-load status summaries for all months (12 queries total, not 12×N)
         $allStatusByMonth = [];
         for ($m = 1; $m <= 12; $m++) {
@@ -304,12 +324,13 @@ class ReportController extends BaseController {
             $vacationStats = $this->absenceService->getVacationStats(
                 $empId,
                 $year,
-                $vacationDaysForYear + (int)round($vacationCarryover)
+                $vacationDaysForYear + $vacationCarryover
             );
             $vacationStats['carryover'] = $vacationCarryover;
 
-            // Overtime carryover
+            // Overtime carryover and paid-out overtime (Gleitzeitkonto-Auszahlung)
             $overtimeCarryover = $this->carryoverService->getOvertimeCarryoverMinutes($empId, $year);
+            $payoutMinutes = $payoutByEmployee[$empId] ?? 0;
 
             $report[] = [
                 'employee' => [
@@ -321,7 +342,8 @@ class ReportController extends BaseController {
                 'vacationStats' => $vacationStats,
                 'months' => $months,
                 'carryoverMinutes' => $overtimeCarryover,
-                'totalOvertimeMinutes' => $totalOvertimeMinutes + $overtimeCarryover,
+                'payoutMinutes' => $payoutMinutes,
+                'totalOvertimeMinutes' => $totalOvertimeMinutes + $overtimeCarryover - $payoutMinutes,
             ];
         }
 
@@ -347,6 +369,13 @@ class ReportController extends BaseController {
             $monthlyData = [];
             $totalOvertime = 0;
 
+            // Paid-out overtime (Gleitzeitkonto-Auszahlung), grouped by effective month.
+            $payoutByMonth = [];
+            foreach ($this->payoutService->findActiveByEmployeeAndYear($employeeId, $year) as $payout) {
+                $payoutByMonth[$payout->getMonth()] = ($payoutByMonth[$payout->getMonth()] ?? 0) + $payout->getMinutes();
+            }
+            $totalPayout = 0;
+
             for ($month = 1; $month <= 12; $month++) {
                 $startDate = new DateTime("$year-$month-01");
 
@@ -361,25 +390,31 @@ class ReportController extends BaseController {
 
                 $stats = $this->calculateMonthlyStats($employee, $year, $month, $timeEntries, $absences, $holidays);
 
+                $monthPayout = $payoutByMonth[$month] ?? 0;
+                $totalPayout += $monthPayout;
+
                 $monthlyData[] = [
                     'month' => $month,
                     'targetMinutes' => $stats['targetMinutes'],
                     'actualMinutes' => $stats['actualMinutes'],
                     'overtimeMinutes' => $stats['overtimeMinutes'],
+                    'payoutMinutes' => $monthPayout,
                 ];
 
                 $totalOvertime += $stats['overtimeMinutes'];
             }
 
             $carryoverMinutes = $this->carryoverService->getOvertimeCarryoverMinutes($employeeId, $year);
+            $balance = $totalOvertime + $carryoverMinutes - $totalPayout;
 
             return $this->successResponse([
                 'employee' => $employee,
                 'year' => $year,
                 'monthly' => $monthlyData,
                 'carryoverMinutes' => $carryoverMinutes,
-                'totalOvertimeMinutes' => $totalOvertime + $carryoverMinutes,
-                'totalOvertimeHours' => round(($totalOvertime + $carryoverMinutes) / 60, 2),
+                'payoutMinutes' => $totalPayout,
+                'totalOvertimeMinutes' => $balance,
+                'totalOvertimeHours' => round($balance / 60, 2),
                 // Average daily target (weekly hours / 5), used for the Freizeitausgleich ≈ hours hint.
                 'dailyMinutes' => (int)round($employee->getWeeklyHours() / 5 * 60),
             ]);

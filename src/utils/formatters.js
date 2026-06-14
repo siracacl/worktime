@@ -160,6 +160,19 @@ export function formatNumber(value, decimals = 0) {
     })
 }
 
+/**
+ * Format a vacation-day count locale-aware, showing up to one decimal.
+ * Whole days render without a decimal (e.g. "1"), half days as "22,5".
+ * @param {number} value
+ * @returns {string}
+ */
+export function formatVacationDays(value) {
+    if (value === null || value === undefined) return '0'
+    return Number(value).toLocaleString(getLocale(), {
+        maximumFractionDigits: 1,
+    })
+}
+
 export default {
     formatMinutes,
     formatMinutesWithUnit,
@@ -174,4 +187,5 @@ export default {
     formatOvertime,
     formatEmployeeName,
     formatNumber,
+    formatVacationDays,
 }

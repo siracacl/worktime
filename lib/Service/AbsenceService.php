@@ -30,6 +30,7 @@ class AbsenceService {
         private AuditLogService $auditLogService,
         private NotificationService $notificationService,
         private WorkScheduleService $workScheduleService,
+        private YearlyCarryoverService $carryoverService,
         private LoggerInterface $logger,
         private IL10N $l,
     ) {
@@ -346,7 +347,7 @@ class AbsenceService {
     /**
      * Get vacation statistics for an employee in a given year
      */
-    public function getVacationStats(int $employeeId, int $year, int $totalVacationDays): array {
+    public function getVacationStats(int $employeeId, int $year, float $totalVacationDays): array {
         $usedDays = $this->absenceMapper->sumVacationDaysByEmployeeAndYear($employeeId, $year);
         $pendingAbsences = $this->absenceMapper->findByType($employeeId, Absence::TYPE_VACATION);
         $pendingDays = 0;
@@ -405,8 +406,10 @@ class AbsenceService {
      * @return array<string, string[]>
      */
     private function checkVacationQuota(int $employeeId, float $requestedDays, int $year, ?int $excludeId = null): void {
-        $employee = $this->employeeMapper->find($employeeId);
-        $totalVacationDays = (int)$employee->getVacationDays();
+        // Schedule-aware, pro-rated entitlement (part-time + partial-year) plus
+        // previous-year carryover — consistent with the vacation stats display.
+        $totalVacationDays = $this->workScheduleService->getVacationDaysForYear($employeeId, $year)
+            + $this->carryoverService->getVacationCarryoverDays($employeeId, $year);
 
         // Sum all active (approved + pending) vacation days for the year, excluding the current record
         $allVacations = $this->absenceMapper->findByEmployeeAndYear($employeeId, $year);
