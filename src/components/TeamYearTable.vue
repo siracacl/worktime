@@ -90,6 +90,25 @@
                     </tr>
                 </tbody>
             </table>
+
+            <!-- Recorded payouts for this member -->
+            <div v-if="canManage && member.payouts && member.payouts.length" class="member-payouts">
+                <div class="member-payouts__title">{{ t('worktime', 'Erfasste Auszahlungen') }}</div>
+                <div v-for="p in member.payouts" :key="p.id" class="member-payouts__row">
+                    <span class="member-payouts__info">
+                        {{ getMonthName(p.month) }} {{ year }} · <strong class="negative">−{{ formatPayoutHours(p.minutes) }} h</strong>
+                        <span v-if="p.note" class="member-payouts__note">– {{ p.note }}</span>
+                    </span>
+                    <NcButton type="tertiary"
+                        :aria-label="t('worktime', 'Auszahlung stornieren')"
+                        :title="t('worktime', 'Auszahlung stornieren')"
+                        @click="onCancelPayout(member, p)">
+                        <template #icon>
+                            <DeleteIcon :size="18" />
+                        </template>
+                    </NcButton>
+                </div>
+            </div>
         </div>
 
         <!-- Approval Dialog -->
@@ -172,6 +191,28 @@
                 </NcButton>
             </template>
         </NcDialog>
+
+        <!-- Cancel-payout Dialog -->
+        <NcDialog v-if="cancelDialog.show"
+            :name="t('worktime', 'Auszahlung stornieren')"
+            @closing="cancelDialog.show = false">
+            <p>
+                {{ t('worktime', 'Auszahlung') }} <strong>{{ cancelDialog.label }}</strong>
+                {{ t('worktime', 'für') }} <strong>{{ cancelDialog.employeeName }}</strong>
+                {{ t('worktime', 'stornieren? Der Saldo wird wiederhergestellt.') }}
+            </p>
+            <template #actions>
+                <NcButton type="tertiary" @click="cancelDialog.show = false">
+                    {{ t('worktime', 'Abbrechen') }}
+                </NcButton>
+                <NcButton type="error" :disabled="cancelDialog.loading" @click="confirmCancelPayout">
+                    <template v-if="cancelDialog.loading" #icon>
+                        <NcLoadingIcon :size="20" />
+                    </template>
+                    {{ t('worktime', 'Stornieren') }}
+                </NcButton>
+            </template>
+        </NcDialog>
     </div>
 </template>
 
@@ -185,6 +226,7 @@ import ClockOutlineIcon from 'vue-material-design-icons/ClockOutline.vue'
 import CloseCircleIcon from 'vue-material-design-icons/CloseCircle.vue'
 import SendIcon from 'vue-material-design-icons/Send.vue'
 import CashMinusIcon from 'vue-material-design-icons/CashMinus.vue'
+import DeleteIcon from 'vue-material-design-icons/Delete.vue'
 import { getMonthNameShort, getMonthName, getCurrentMonth, getLocale } from '../utils/dateUtils.js'
 import { formatMinutes } from '../utils/timeUtils.js'
 import { formatVacationDays } from '../utils/formatters.js'
@@ -204,6 +246,7 @@ export default {
         CloseCircleIcon,
         SendIcon,
         CashMinusIcon,
+        DeleteIcon,
     },
     props: {
         report: {
@@ -244,6 +287,13 @@ export default {
                 employeeId: null,
                 employeeName: '',
                 month: null,
+                loading: false,
+            },
+            cancelDialog: {
+                show: false,
+                id: null,
+                label: '',
+                employeeName: '',
                 loading: false,
             },
         }
@@ -361,6 +411,31 @@ export default {
                 showError(error.message || t('worktime', 'Fehler beim Einreichen'))
             } finally {
                 this.submitDialog.loading = false
+            }
+        },
+        formatPayoutHours(minutes) {
+            return formatMinutes(Math.abs(minutes))
+        },
+        onCancelPayout(member, payout) {
+            this.cancelDialog = {
+                show: true,
+                id: payout.id,
+                label: `${getMonthName(payout.month)} ${this.year} · ${formatMinutes(Math.abs(payout.minutes))} h`,
+                employeeName: member.employee.fullName,
+                loading: false,
+            }
+        },
+        async confirmCancelPayout() {
+            this.cancelDialog.loading = true
+            try {
+                await OvertimePayoutService.cancel(this.cancelDialog.id)
+                showSuccess(t('worktime', 'Auszahlung storniert.'))
+                this.cancelDialog.show = false
+                this.$emit('reload')
+            } catch (error) {
+                showError(error.message || t('worktime', 'Stornieren fehlgeschlagen.'))
+            } finally {
+                this.cancelDialog.loading = false
             }
         },
     },
@@ -509,6 +584,34 @@ table {
 
 .member-card__payout {
     margin-left: auto;
+}
+
+.member-payouts {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--color-border);
+}
+
+.member-payouts__title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-maxcontrast);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 6px;
+}
+
+.member-payouts__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 2px 0;
+    font-size: 13px;
+}
+
+.member-payouts__note {
+    color: var(--color-text-maxcontrast);
 }
 
 .payout-form {

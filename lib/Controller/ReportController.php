@@ -218,7 +218,11 @@ class ReportController extends BaseController {
             $payoutCutoffMonth = (int)$now->format('n');
         }
         $payoutByEmployee = [];
+        $payoutListByEmployee = [];
         foreach ($this->payoutService->findActiveByEmployeeIdsAndYear($employeeIds, $year) as $payout) {
+            // Full list (all months) for display/management in the team view.
+            $payoutListByEmployee[$payout->getEmployeeId()][] = $payout->jsonSerialize();
+            // Balance only counts effective months that are not in the future.
             if ($payout->getMonth() <= $payoutCutoffMonth) {
                 $payoutByEmployee[$payout->getEmployeeId()] = ($payoutByEmployee[$payout->getEmployeeId()] ?? 0) + $payout->getMinutes();
             }
@@ -345,6 +349,7 @@ class ReportController extends BaseController {
                 'months' => $months,
                 'carryoverMinutes' => $overtimeCarryover,
                 'payoutMinutes' => $payoutMinutes,
+                'payouts' => $payoutListByEmployee[$empId] ?? [],
                 'totalOvertimeMinutes' => $totalOvertimeMinutes + $overtimeCarryover - $payoutMinutes,
             ];
         }
