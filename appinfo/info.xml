@@ -44,8 +44,8 @@ Gesetzeskonforme Arbeitszeiterfassung für kleine Unternehmen in Deutschland.
 Behalten Sie den Überblick über Arbeitszeiten, Überstunden und Urlaub.
     ]]></description>
 
-    <!-- Fork-Versionsschema: YYYY.MMDD.HHMM (z.B. 2026.614.1747 = 14.06.2026 17:47) -->
-    <version>2026.614.1747</version>
+    <!-- Fork-Versionsschema: YYYY.MMDD.HHMM (z.B. 2026.614.1809 = 14.06.2026 18:09) -->
+    <version>2026.614.1809</version>
     <licence>AGPL-3.0-or-later</licence>
 
     <author mail="axel.deffner@cpcmomentum.com" homepage="https://github.com/cpcMomentum">Axel Deffner</author>
