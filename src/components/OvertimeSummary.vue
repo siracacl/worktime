@@ -33,16 +33,16 @@
                 <div v-if="vacationSub" class="kpi-sub">{{ vacationSub }}</div>
             </div>
 
-            <!-- Überstunden -->
+            <!-- Gleitzeitkonto-Saldo (kumuliert: Übertrag + Überstunden − Auszahlungen) -->
             <div class="kpi-card">
                 <div class="kpi-lab">
-                    {{ overtimeMinutes >= 0 ? t('worktime', 'Überstunden') : t('worktime', 'Minusstunden') }}
-                    <InfoIcon>{{ t('worktime', 'Das Soll wird anteilig bis gestern berechnet. Der heutige Tag zählt erst mit, sobald du Zeit erfasst.') }}</InfoIcon>
+                    {{ displayBalance >= 0 ? t('worktime', 'Überstunden') : t('worktime', 'Minusstunden') }}
+                    <InfoIcon>{{ t('worktime', 'Gleitzeitkonto-Saldo: Übertrag aus dem Vorjahr plus erarbeitete Überstunden, abzüglich ausgezahlter Stunden.') }}</InfoIcon>
                 </div>
-                <div class="kpi-num" :class="{ pos: overtimeMinutes > 0, neg: overtimeMinutes < 0 }">
-                    {{ overtimeMinutes > 0 ? '+' : '' }}{{ absHoursLabel(overtimeMinutes) }} <small>h</small>
+                <div class="kpi-num" :class="{ pos: displayBalance > 0, neg: displayBalance < 0 }">
+                    {{ displayBalance > 0 ? '+' : '' }}{{ absHoursLabel(displayBalance) }} <small>h</small>
                 </div>
-                <div class="kpi-sub">{{ t('worktime', 'Stand heute') }}</div>
+                <div class="kpi-sub">{{ t('worktime', 'Gleitzeitkonto · Stand heute') }}</div>
             </div>
         </div>
 
@@ -120,6 +120,12 @@ export default {
             type: Number,
             default: 0,
         },
+        // Cumulative flextime balance (carryover + overtime − payouts). Falls back
+        // to overtimeMinutes when not provided.
+        balanceMinutes: {
+            type: Number,
+            default: null,
+        },
         vacationRemaining: {
             type: Number,
             default: null,
@@ -186,6 +192,9 @@ export default {
                 return this.t('worktime', 'noch {hours} h bis Jahressoll', { hours: this.hoursLabel(this.remaining) })
             }
             return this.t('worktime', 'noch {hours} h bis Monatssoll', { hours: this.hoursLabel(this.remaining) })
+        },
+        displayBalance() {
+            return this.balanceMinutes !== null ? this.balanceMinutes : this.overtimeMinutes
         },
         pacingPositive() {
             return this.overtimeMinutes >= 0
