@@ -313,6 +313,8 @@ class ReportController extends BaseController {
                     'vacationDays' => $vacationDays,
                     'status' => $status,
                     'canApprove' => $statusSummary['submitted'] > 0,
+                    // Draft or rejected entries exist that an HR/admin could submit on behalf.
+                    'canSubmit' => ($statusSummary['draft'] + $statusSummary['rejected']) > 0,
                 ];
 
                 $totalOvertimeMinutes += $stats['overtimeMinutes'];

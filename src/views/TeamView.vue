@@ -11,7 +11,9 @@
         <TeamYearTable v-else-if="teamReport.length > 0"
             :report="teamReport"
             :year="year"
-            @approved="loadTeamReport" />
+            :can-manage="canManageEmployees"
+            @approved="loadTeamReport"
+            @reload="loadTeamReport" />
 
         <NcEmptyContent v-else
             :name="t('worktime', 'Kein Team')">
@@ -33,6 +35,7 @@ import YearPicker from '../components/YearPicker.vue'
 import TeamYearTable from '../components/TeamYearTable.vue'
 import ReportService from '../services/ReportService.js'
 import { getCurrentYear } from '../utils/dateUtils.js'
+import { mapGetters } from 'vuex'
 
 export default {
     name: 'TeamView',
@@ -42,6 +45,9 @@ export default {
         AccountGroupIcon,
         YearPicker,
         TeamYearTable,
+    },
+    computed: {
+        ...mapGetters('permissions', ['canManageEmployees']),
     },
     data() {
         return {

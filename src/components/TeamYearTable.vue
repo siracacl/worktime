@@ -10,6 +10,15 @@
                     :size="44" />
                 <span class="member-card__name">{{ member.employee.fullName }}</span>
                 <span class="member-card__hours">{{ member.employee.weeklyHours }} {{ t('worktime', 'Std./Woche') }}</span>
+                <NcButton v-if="canManage"
+                    type="secondary"
+                    class="member-card__payout"
+                    @click="openPayoutDialog(member)">
+                    <template #icon>
+                        <CashMinusIcon :size="18" />
+                    </template>
+                    {{ t('worktime', 'Auszahlen') }}
+                </NcButton>
             </div>
 
             <!-- Data table -->
@@ -71,6 +80,11 @@
                                 :size="20"
                                 class="status-icon status-rejected"
                                 :title="t('worktime', 'Abgelehnt')" />
+                            <SendIcon v-if="canManage && m.canSubmit && (m.status === 'draft' || m.status === 'rejected')"
+                                :size="17"
+                                class="status-icon status-submit clickable"
+                                :title="t('worktime', 'Monat für Mitarbeiter einreichen')"
+                                @click="onSubmitClick(member, m.month)" />
                         </td>
                         <td class="col-total" />
                     </tr>
@@ -100,6 +114,64 @@
                 </NcButton>
             </template>
         </NcDialog>
+
+        <!-- Payout Dialog -->
+        <NcDialog v-if="payoutDialog.show"
+            :name="t('worktime', 'Überstunden auszahlen')"
+            @closing="payoutDialog.show = false">
+            <div class="payout-form">
+                <p class="payout-form__hint">
+                    {{ t('worktime', 'Mitarbeiter: {name}', { name: payoutDialog.employeeName }) }} ·
+                    {{ t('worktime', 'Aktueller Saldo: {hours} h', { hours: payoutBalanceHours }) }}
+                </p>
+                <label class="payout-field">
+                    <span>{{ t('worktime', 'Stichmonat') }}</span>
+                    <select v-model.number="payoutDialog.month">
+                        <option v-for="mm in 12" :key="mm" :value="mm">{{ getMonthName(mm) }} {{ year }}</option>
+                    </select>
+                </label>
+                <label class="payout-field">
+                    <span>{{ t('worktime', 'Auszuzahlende Stunden') }}</span>
+                    <input v-model="payoutDialog.hours" type="number" step="0.25" min="0">
+                </label>
+                <label class="payout-field">
+                    <span>{{ t('worktime', 'Grund') }}</span>
+                    <input v-model="payoutDialog.note" type="text" :placeholder="t('worktime', 'z. B. Auszahlung Überstunden')">
+                </label>
+            </div>
+            <template #actions>
+                <NcButton type="tertiary" @click="payoutDialog.show = false">
+                    {{ t('worktime', 'Abbrechen') }}
+                </NcButton>
+                <NcButton type="primary" :disabled="payoutDialog.loading" @click="confirmPayout">
+                    <template v-if="payoutDialog.loading" #icon>
+                        <NcLoadingIcon :size="20" />
+                    </template>
+                    {{ t('worktime', 'Speichern') }}
+                </NcButton>
+            </template>
+        </NcDialog>
+
+        <!-- Submit-month Dialog -->
+        <NcDialog v-if="submitDialog.show"
+            :name="t('worktime', 'Monat einreichen')"
+            @closing="submitDialog.show = false">
+            <p>
+                {{ getMonthName(submitDialog.month) }} {{ year }} {{ t('worktime', 'für') }}
+                <strong>{{ submitDialog.employeeName }}</strong> {{ t('worktime', 'einreichen?') }}
+            </p>
+            <template #actions>
+                <NcButton type="tertiary" @click="submitDialog.show = false">
+                    {{ t('worktime', 'Abbrechen') }}
+                </NcButton>
+                <NcButton type="primary" :disabled="submitDialog.loading" @click="confirmSubmit">
+                    <template v-if="submitDialog.loading" #icon>
+                        <NcLoadingIcon :size="20" />
+                    </template>
+                    {{ t('worktime', 'Einreichen') }}
+                </NcButton>
+            </template>
+        </NcDialog>
     </div>
 </template>
 
@@ -111,10 +183,13 @@ import NcLoadingIcon from '@nextcloud/vue/dist/Components/NcLoadingIcon.js'
 import CheckCircleIcon from 'vue-material-design-icons/CheckCircle.vue'
 import ClockOutlineIcon from 'vue-material-design-icons/ClockOutline.vue'
 import CloseCircleIcon from 'vue-material-design-icons/CloseCircle.vue'
-import { getMonthNameShort, getMonthName } from '../utils/dateUtils.js'
+import SendIcon from 'vue-material-design-icons/Send.vue'
+import CashMinusIcon from 'vue-material-design-icons/CashMinus.vue'
+import { getMonthNameShort, getMonthName, getCurrentMonth, getLocale } from '../utils/dateUtils.js'
 import { formatMinutes } from '../utils/timeUtils.js'
 import { formatVacationDays } from '../utils/formatters.js'
 import TimeEntryService from '../services/TimeEntryService.js'
+import OvertimePayoutService from '../services/OvertimePayoutService.js'
 import { showSuccess, showError } from '@nextcloud/dialogs'
 
 export default {
@@ -127,6 +202,8 @@ export default {
         CheckCircleIcon,
         ClockOutlineIcon,
         CloseCircleIcon,
+        SendIcon,
+        CashMinusIcon,
     },
     props: {
         report: {
@@ -137,7 +214,12 @@ export default {
             type: Number,
             required: true,
         },
+        canManage: {
+            type: Boolean,
+            default: false,
+        },
     },
+    emits: ['approved', 'reload'],
     data() {
         return {
             approveDialog: {
@@ -147,7 +229,29 @@ export default {
                 month: null,
                 loading: false,
             },
+            payoutDialog: {
+                show: false,
+                employeeId: null,
+                employeeName: '',
+                month: getCurrentMonth(),
+                hours: '',
+                note: '',
+                balanceMinutes: 0,
+                loading: false,
+            },
+            submitDialog: {
+                show: false,
+                employeeId: null,
+                employeeName: '',
+                month: null,
+                loading: false,
+            },
         }
+    },
+    computed: {
+        payoutBalanceHours() {
+            return (this.payoutDialog.balanceMinutes / 60).toLocaleString(getLocale(), { maximumFractionDigits: 1 })
+        },
     },
     methods: {
         getMonthNameShort,
@@ -189,6 +293,74 @@ export default {
                 showError(t('worktime', 'Fehler beim Genehmigen'))
             } finally {
                 this.approveDialog.loading = false
+            }
+        },
+        openPayoutDialog(member) {
+            const balance = member.totalOvertimeMinutes || 0
+            this.payoutDialog = {
+                show: true,
+                employeeId: member.employee.id,
+                employeeName: member.employee.fullName,
+                month: getCurrentMonth(),
+                hours: balance > 0 ? Number((balance / 60).toFixed(2)) : '',
+                note: '',
+                balanceMinutes: balance,
+                loading: false,
+            }
+        },
+        async confirmPayout() {
+            const hours = Number(this.payoutDialog.hours)
+            if (!hours || Number.isNaN(hours) || hours <= 0) {
+                showError(t('worktime', 'Bitte einen positiven Stundenbetrag eingeben.'))
+                return
+            }
+            if (!this.payoutDialog.note || !this.payoutDialog.note.trim()) {
+                showError(t('worktime', 'Bitte einen Grund angeben.'))
+                return
+            }
+            this.payoutDialog.loading = true
+            try {
+                await OvertimePayoutService.create(
+                    this.payoutDialog.employeeId,
+                    this.year,
+                    this.payoutDialog.month,
+                    Math.round(hours * 60),
+                    this.payoutDialog.note.trim(),
+                )
+                showSuccess(t('worktime', 'Auszahlung gespeichert.'))
+                this.payoutDialog.show = false
+                this.$emit('reload')
+            } catch (error) {
+                showError(error.message || t('worktime', 'Speichern fehlgeschlagen.'))
+            } finally {
+                this.payoutDialog.loading = false
+            }
+        },
+        onSubmitClick(member, month) {
+            this.submitDialog = {
+                show: true,
+                employeeId: member.employee.id,
+                employeeName: member.employee.fullName,
+                month,
+                loading: false,
+            }
+        },
+        async confirmSubmit() {
+            this.submitDialog.loading = true
+            try {
+                const result = await TimeEntryService.submitMonth(
+                    this.submitDialog.employeeId,
+                    this.year,
+                    this.submitDialog.month,
+                )
+                showSuccess(t('worktime', '{count} Einträge eingereicht', { count: result?.submitted ?? 0 }))
+                this.submitDialog.show = false
+                this.$emit('reload')
+            } catch (error) {
+                console.error('Failed to submit month:', error)
+                showError(error.message || t('worktime', 'Fehler beim Einreichen'))
+            } finally {
+                this.submitDialog.loading = false
             }
         },
     },
@@ -322,6 +494,49 @@ table {
 
 .status-rejected {
     color: var(--wt-sick, #cc4b42);
+}
+
+.status-submit {
+    color: var(--color-primary-element);
+    cursor: pointer;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+
+.status-submit:hover {
+    opacity: 0.7;
+}
+
+.member-card__payout {
+    margin-left: auto;
+}
+
+.payout-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 4px 2px 8px;
+    min-width: 280px;
+}
+
+.payout-form__hint {
+    margin: 0;
+    font-size: 13px;
+    color: var(--color-text-maxcontrast);
+}
+
+.payout-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text-maxcontrast);
+}
+
+.payout-field select,
+.payout-field input {
+    width: 100%;
 }
 
 .muted {
