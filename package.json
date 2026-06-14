@@ -1,6 +1,6 @@
 {
     "name": "worktime",
-    "version": "2026.614.1727",
+    "version": "2026.614.1747",
     "description": "Nextcloud App zur Arbeitszeiterfassung",
     "main": "src/main.js",
     "scripts": {
