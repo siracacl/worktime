@@ -45,7 +45,7 @@ Behalten Sie den Überblick über Arbeitszeiten, Überstunden und Urlaub.
     ]]></description>
 
     <!-- Fork-Versionsschema: YYYY.MMDD.HHMM (z.B. 2026.614.1816 = 14.06.2026 18:16) -->
-    <version>2026.614.1816</version>
+    <version>2026.718.1235</version>
     <licence>AGPL-3.0-or-later</licence>
 
     <author mail="axel.deffner@cpcmomentum.com" homepage="https://github.com/cpcMomentum">Axel Deffner</author>

@@ -109,6 +109,12 @@ export default {
             type: String,
             default: null,
         },
+        // Admin/HR dürfen eingereichte (noch nicht genehmigte) Einträge
+        // bearbeiten — z. B. bei Fremderfassung für andere Mitarbeiter.
+        canEditSubmitted: {
+            type: Boolean,
+            default: false,
+        },
     },
     emits: ['refresh'],
     data() {
@@ -134,7 +140,8 @@ export default {
                 : this.t('worktime', '{scope} Tage', { scope })
         },
         readonly() {
-            return this.monthStatus === 'submitted' || this.monthStatus === 'approved'
+            if (this.monthStatus === 'approved') return true
+            return this.monthStatus === 'submitted' && !this.canEditSubmitted
         },
         lockedMessage() {
             if (this.monthStatus === 'approved') {

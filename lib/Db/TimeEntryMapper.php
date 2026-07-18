@@ -213,6 +213,54 @@ class TimeEntryMapper extends QBMapper {
     }
 
     /**
+     * All entries of all employees in the inclusive date range, for the
+     * project evaluation (detail view / exports).
+     *
+     * @return TimeEntry[]
+     */
+    public function findByDateRange(DateTime $startDate, DateTime $endDate): array {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('*')
+            ->from($this->getTableName())
+            ->where($qb->expr()->gte('date', $qb->createNamedParameter($startDate, IQueryBuilder::PARAM_DATE)))
+            ->andWhere($qb->expr()->lte('date', $qb->createNamedParameter($endDate, IQueryBuilder::PARAM_DATE)))
+            ->orderBy('date', 'ASC')
+            ->addOrderBy('start_time', 'ASC');
+
+        return $this->findEntities($qb);
+    }
+
+    /**
+     * Work minutes summed per (project, employee) over the inclusive date
+     * range, for the project evaluation. project_id NULL is reported as 0
+     * ("Kein Projekt").
+     *
+     * @return array<array{projectId: int, employeeId: int, minutes: int}>
+     */
+    public function sumWorkMinutesGroupedByProjectAndEmployee(DateTime $startDate, DateTime $endDate): array {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('project_id', 'employee_id')
+            ->selectAlias($qb->func()->sum('work_minutes'), 'minutes')
+            ->from($this->getTableName())
+            ->where($qb->expr()->gte('date', $qb->createNamedParameter($startDate, IQueryBuilder::PARAM_DATE)))
+            ->andWhere($qb->expr()->lte('date', $qb->createNamedParameter($endDate, IQueryBuilder::PARAM_DATE)))
+            ->groupBy('project_id', 'employee_id');
+
+        $result = $qb->executeQuery();
+        $rows = [];
+        while ($row = $result->fetch()) {
+            $rows[] = [
+                'projectId' => (int)$row['project_id'],
+                'employeeId' => (int)$row['employee_id'],
+                'minutes' => (int)$row['minutes'],
+            ];
+        }
+        $result->closeCursor();
+
+        return $rows;
+    }
+
+    /**
      * @return TimeEntry[]
      */
     public function findByProject(int $projectId): array {

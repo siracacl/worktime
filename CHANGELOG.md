@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [2026.718.1235] - 2026-07-18
+
+### Added
+- **Projekt-Auswertung für Admin/HR** (angelehnt an Upstream #57): Neue Ansicht „Projekt-Auswertung" summiert erfasste Arbeitszeiten je Projekt und je Mitarbeiter über Monat/Quartal/Jahr. Filterbar über Projekt- und Mitarbeiter-Chips (mit Suche und Top-N-Anzeige), Kennzahlen-Karten (Stunden gesamt, davon abrechenbar, Projekte, Mitarbeitende), drei Tabs: Nach Projekt, Nach Mitarbeiter, Einzelbuchungen. Neue Endpoints `GET /api/reports/projects` und `GET /api/reports/project-entries`.
+- **CSV- und PDF-Export der Projekt-Auswertung**: Export folgt der aktiven Ansicht und der Chip-Auswahl (`GET /api/reports/projects-csv`, `GET /api/reports/projects-pdf`). CSV mit UTF-8-BOM/Semikolon für Excel; PDF dokumentiert die gewählten Filter im Kopf.
+- **Zeiterfassung für andere Mitarbeiter (Admin/HR)**: In der Zeiterfassung kann per Mitarbeiter-Auswahl auf einen anderen Mitarbeiter umgeschaltet werden — Einträge anlegen, bearbeiten, löschen und Monat einreichen, ohne sich als der Mitarbeiter anzumelden. Alle Aktionen werden im Audit-Log unter dem tatsächlich handelnden Benutzer protokolliert (kein Impersonation-Verfälschen mehr). Ein Hinweis-Banner zeigt an, wessen Zeiterfassung gerade bearbeitet wird.
+
+### Changed
+- **Eingereichte Einträge für Admin/HR bearbeitbar**: Admin/HR dürfen Zeiteinträge im Status „eingereicht" (vor Genehmigung) korrigieren und löschen; der Eintrag bleibt dabei eingereicht. Für Mitarbeiter bleiben eingereichte Einträge weiterhin gesperrt, genehmigte Einträge bleiben für alle gesperrt (Korrektur nur über Reopen).
+
 ## [0.9.3] - 2026-06-12
 
 ### Changed

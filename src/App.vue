@@ -39,6 +39,15 @@
 
 			<NcAppNavigationItem
 				v-if="isAdmin || isHrManager"
+				:name="t('worktime', 'Projekt-Auswertung')"
+				to="/evaluation">
+				<template #icon>
+					<ChartBarIcon :size="20" />
+				</template>
+			</NcAppNavigationItem>
+
+			<NcAppNavigationItem
+				v-if="isAdmin || isHrManager"
 				:name="t('worktime', 'Audit-Log')"
 				to="/audit">
 				<template #icon>
@@ -116,6 +125,7 @@ import CogIcon from 'vue-material-design-icons/Cog.vue'
 import AccountCogIcon from 'vue-material-design-icons/AccountCog.vue'
 import AlertIcon from 'vue-material-design-icons/Alert.vue'
 import ShieldIcon from 'vue-material-design-icons/Shield.vue'
+import ChartBarIcon from 'vue-material-design-icons/ChartBar.vue'
 import { mapGetters, mapActions } from 'vuex'
 
 export default {
@@ -135,6 +145,7 @@ export default {
 		AccountCogIcon,
 		AlertIcon,
 		ShieldIcon,
+		ChartBarIcon,
 	},
 	computed: {
 		...mapGetters('permissions', ['isEmployee', 'isAdmin', 'isHrManager', 'hasEmployees', 'canManageSettings', 'canApprove']),

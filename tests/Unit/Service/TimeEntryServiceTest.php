@@ -13,6 +13,7 @@ use OCA\WorkTime\Db\TimeEntry;
 use OCA\WorkTime\Db\TimeEntryMapper;
 use OCA\WorkTime\Notification\NotificationService;
 use OCA\WorkTime\Service\AuditLogService;
+use OCA\WorkTime\Service\PermissionService;
 use OCA\WorkTime\Service\TimeEntryService;
 use OCA\WorkTime\Service\ValidationException;
 use OCP\IL10N;
@@ -28,6 +29,7 @@ class TimeEntryServiceTest extends TestCase {
     private AbsenceMapper $absenceMapper;
     private AuditLogService $auditLogService;
     private NotificationService $notificationService;
+    private PermissionService $permissionService;
     private LoggerInterface $logger;
     private IL10N $l;
 
@@ -38,6 +40,7 @@ class TimeEntryServiceTest extends TestCase {
         $this->absenceMapper = $this->createMock(AbsenceMapper::class);
         $this->auditLogService = $this->createMock(AuditLogService::class);
         $this->notificationService = $this->createMock(NotificationService::class);
+        $this->permissionService = $this->createMock(PermissionService::class);
         $this->logger = $this->createMock(LoggerInterface::class);
         $this->l = $this->createMock(IL10N::class);
         $this->l->method('t')->willReturnCallback(
@@ -77,6 +80,7 @@ class TimeEntryServiceTest extends TestCase {
             $this->absenceMapper,
             $this->auditLogService,
             $this->notificationService,
+            $this->permissionService,
             $this->logger,
             $this->l
         );

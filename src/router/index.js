@@ -9,6 +9,7 @@ import ApprovalOverviewView from '../views/ApprovalOverviewView.vue'
 import MySettingsView from '../views/MySettingsView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import AuditView from '../views/AuditView.vue'
+import ProjectEvaluationView from '../views/ProjectEvaluationView.vue'
 
 Vue.use(VueRouter)
 
@@ -55,6 +56,12 @@ const routes = [
 		name: 'settings',
 		component: SettingsView,
 		meta: { requiresSettings: true },
+	},
+	{
+		path: '/evaluation',
+		name: 'evaluation',
+		component: ProjectEvaluationView,
+		meta: { requiresAdminOrHr: true },
 	},
 	{
 		path: '/audit',

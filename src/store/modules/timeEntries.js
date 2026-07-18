@@ -6,6 +6,9 @@ const state = {
         year: new Date().getFullYear(),
         month: new Date().getMonth() + 1,
     },
+    // Admin/HR: Zeiterfassung im Namen eines anderen Mitarbeiters.
+    // null = eigene Zeiterfassung.
+    targetEmployeeId: null,
     loading: false,
     error: null,
 }
@@ -13,6 +16,12 @@ const state = {
 const getters = {
     timeEntries: (state) => state.timeEntries,
     selectedMonth: (state) => state.selectedMonth,
+    targetEmployeeId: (state) => state.targetEmployeeId,
+    // Der Mitarbeiter, dessen Einträge gerade angezeigt/bearbeitet werden.
+    activeEmployeeId: (state, getters, rootState, rootGetters) =>
+        state.targetEmployeeId || rootGetters['permissions/employeeId'],
+    isManagingOther: (state, getters, rootState, rootGetters) =>
+        !!state.targetEmployeeId && state.targetEmployeeId !== rootGetters['permissions/employeeId'],
     loading: (state) => state.loading,
     error: (state) => state.error,
     getEntryById: (state) => (id) => state.timeEntries.find((e) => e.id === id),
@@ -53,6 +62,9 @@ const mutations = {
     SET_SELECTED_MONTH(state, { year, month }) {
         state.selectedMonth = { year, month }
     },
+    SET_TARGET_EMPLOYEE(state, employeeId) {
+        state.targetEmployeeId = employeeId
+    },
     SET_LOADING(state, loading) {
         state.loading = loading
     },
@@ -74,8 +86,8 @@ const mutations = {
 }
 
 const actions = {
-    async fetchTimeEntries({ commit, state, rootGetters }) {
-        const employeeId = rootGetters['permissions/employeeId']
+    async fetchTimeEntries({ commit, state, getters }) {
+        const employeeId = getters.activeEmployeeId
         if (!employeeId) return
 
         commit('SET_LOADING', true)
@@ -96,8 +108,14 @@ const actions = {
         dispatch('fetchTimeEntries')
     },
 
-    async createTimeEntry({ commit, rootGetters }, data) {
-        const employeeId = rootGetters['permissions/employeeId']
+    // Admin/HR: auf einen anderen Mitarbeiter umschalten (null = selbst).
+    // Das Neuladen übernimmt der Aufrufer (loadData in der View).
+    setTargetEmployee({ commit }, employeeId) {
+        commit('SET_TARGET_EMPLOYEE', employeeId)
+    },
+
+    async createTimeEntry({ commit, getters }, data) {
+        const employeeId = getters.activeEmployeeId
         const entry = await TimeEntryService.create({ ...data, employeeId })
         commit('ADD_TIME_ENTRY', entry)
         return entry
@@ -136,8 +154,8 @@ const actions = {
         return await TimeEntryService.suggestBreak(startTime, endTime)
     },
 
-    async submitMonth({ dispatch, state, rootGetters }) {
-        const employeeId = rootGetters['permissions/employeeId']
+    async submitMonth({ dispatch, state, getters }) {
+        const employeeId = getters.activeEmployeeId
         const { year, month } = state.selectedMonth
         const result = await TimeEntryService.submitMonth(employeeId, year, month)
         // Reload entries to get updated status

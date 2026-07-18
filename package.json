@@ -1,6 +1,6 @@
 {
     "name": "worktime",
-    "version": "2026.614.1816",
+    "version": "2026.718.1235",
     "description": "Nextcloud App zur Arbeitszeiterfassung",
     "main": "src/main.js",
     "scripts": {
@@ -36,6 +36,7 @@
         "vuex": "^3.6.2"
     },
     "devDependencies": {
+        "@nextcloud/browserslist-config": "^3.1.2",
         "@nextcloud/eslint-config": "^8.4.1",
         "@nextcloud/webpack-vue-config": "^6.1.1",
         "eslint": "^8.57.0",

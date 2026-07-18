@@ -3,6 +3,14 @@
         <div class="view-header">
             <h2>{{ t('worktime', 'Zeiterfassung') }}</h2>
 
+            <NcSelect v-if="canManageEmployees && employeeOptions.length"
+                v-model="selectedEmployeeOption"
+                class="employee-select"
+                :options="employeeOptions"
+                label="fullName"
+                :clearable="false"
+                :aria-label-combobox="t('worktime', 'Mitarbeiter auswählen')" />
+
             <div v-if="!isNarrow" class="layout-seg" role="group" :aria-label="t('worktime', 'Ansicht')">
                 <button class="seg-btn"
                     :class="{ active: layoutMode === 'list' }"
@@ -69,6 +77,16 @@
             </div>
         </div>
 
+        <div v-if="isManagingOther" class="other-employee-banner">
+            <AccountEditIcon :size="20" />
+            <span>
+                {{ t('worktime', 'Sie bearbeiten die Zeiterfassung von {name}. Änderungen werden im Audit-Log unter Ihrem Namen protokolliert.', { name: activeEmployeeName }) }}
+            </span>
+            <NcButton v-if="employeeId" type="tertiary" @click="switchToSelf">
+                {{ t('worktime', 'Zu meiner Zeiterfassung') }}
+            </NcButton>
+        </div>
+
         <div v-if="locked && !isYearMode" class="lock-banner">
             <LockIcon :size="20" />
             {{ t('worktime', 'Monat genehmigt – Einträge gesperrt. Korrektur nur durch HR.') }}
@@ -129,6 +147,7 @@
                 <DayDetailPanel :day="selectedDay"
                     :projects="projects"
                     :month-status="monthStatus"
+                    :can-edit-submitted="canManageEmployees"
                     @refresh="loadData" />
             </div>
         </div>
@@ -140,6 +159,7 @@
                 <DayDetailPanel :day="selectedDay"
                     :projects="projects"
                     :month-status="monthStatus"
+                    :can-edit-submitted="canManageEmployees"
                     @refresh="loadData" />
             </div>
         </NcModal>
@@ -188,8 +208,10 @@ import NcActions from '@nextcloud/vue/dist/Components/NcActions.js'
 import NcActionButton from '@nextcloud/vue/dist/Components/NcActionButton.js'
 import NcLoadingIcon from '@nextcloud/vue/dist/Components/NcLoadingIcon.js'
 import NcModal from '@nextcloud/vue/dist/Components/NcModal.js'
+import NcSelect from '@nextcloud/vue/dist/Components/NcSelect.js'
 import SendIcon from 'vue-material-design-icons/Send.vue'
 import LockIcon from 'vue-material-design-icons/Lock.vue'
+import AccountEditIcon from 'vue-material-design-icons/AccountEdit.vue'
 import FilePdfBox from 'vue-material-design-icons/FilePdfBox.vue'
 import FormatListBulletedIcon from 'vue-material-design-icons/FormatListBulleted.vue'
 import CalendarIcon from 'vue-material-design-icons/Calendar.vue'
@@ -220,8 +242,10 @@ export default {
         NcActionButton,
         NcLoadingIcon,
         NcModal,
+        NcSelect,
         SendIcon,
         LockIcon,
+        AccountEditIcon,
         FilePdfBox,
         FormatListBulletedIcon,
         CalendarIcon,
@@ -261,12 +285,35 @@ export default {
     },
     computed: {
         ...mapState('timeEntries', ['selectedMonth']),
-        ...mapGetters('timeEntries', ['timeEntries', 'loading']),
+        ...mapGetters('timeEntries', ['timeEntries', 'loading', 'activeEmployeeId', 'targetEmployeeId', 'isManagingOther']),
         ...mapGetters('permissions', ['employeeId', 'approvalRequired', 'canManageEmployees']),
-        ...mapGetters('employees', ['currentEmployee']),
+        ...mapGetters('employees', ['currentEmployee', 'employees', 'getEmployeeById']),
         ...mapGetters('projects', ['activeProjects']),
         projects() {
             return this.activeProjects
+        },
+        employeeOptions() {
+            return this.employees
+                .filter(e => e.isActive !== false && e.isActive !== 0)
+                .map(e => ({ id: e.id, fullName: e.fullName }))
+                .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''))
+        },
+        selectedEmployeeOption: {
+            get() {
+                return this.employeeOptions.find(o => o.id === this.activeEmployeeId) || null
+            },
+            set(option) {
+                this.onEmployeeChange(option)
+            },
+        },
+        activeEmployee() {
+            if (this.targetEmployeeId) {
+                return this.getEmployeeById(this.targetEmployeeId) || null
+            }
+            return this.currentEmployee
+        },
+        activeEmployeeName() {
+            return this.activeEmployee?.fullName || ''
         },
         effectiveLayout() {
             if (this.layoutMode === 'year') return 'year'
@@ -298,8 +345,8 @@ export default {
             })
         },
         minYear() {
-            if (this.currentEmployee?.entryDate) {
-                return new Date(this.currentEmployee.entryDate).getFullYear()
+            if (this.activeEmployee?.entryDate) {
+                return new Date(this.activeEmployee.entryDate).getFullYear()
             }
             return getCurrentYear()
         },
@@ -401,6 +448,9 @@ export default {
     },
     mounted() {
         this.$store.dispatch('projects/fetchProjects')
+        if (this.canManageEmployees) {
+            this.$store.dispatch('employees/fetchEmployees')
+        }
         this.updateIsNarrow()
         window.addEventListener('resize', this.updateIsNarrow)
     },
@@ -408,8 +458,18 @@ export default {
         window.removeEventListener('resize', this.updateIsNarrow)
     },
     methods: {
-        ...mapActions('timeEntries', ['fetchTimeEntries', 'setSelectedMonth']),
+        ...mapActions('timeEntries', ['fetchTimeEntries', 'setSelectedMonth', 'setTargetEmployee']),
         getMonthName,
+        async onEmployeeChange(option) {
+            const id = option?.id ?? null
+            const target = (id && id !== this.employeeId) ? id : null
+            if (target === this.targetEmployeeId) return
+            await this.setTargetEmployee(target)
+            await this.loadData()
+        },
+        async switchToSelf() {
+            await this.onEmployeeChange(this.employeeId ? { id: this.employeeId } : null)
+        },
         updateIsNarrow() {
             this.isNarrow = window.innerWidth <= 920
         },
@@ -439,7 +499,7 @@ export default {
             }
         },
         async loadData() {
-            if (!this.employeeId) return
+            if (!this.activeEmployeeId) return
             this.overviewYear = this.selectedMonth.year
             await Promise.all([
                 this.fetchTimeEntries(),
@@ -449,13 +509,13 @@ export default {
             ])
         },
         async loadOvertime() {
-            if (!this.employeeId) return
+            if (!this.activeEmployeeId) return
             try {
-                const overtime = await ReportService.getOvertime(this.employeeId, this.overviewYear)
+                const overtime = await ReportService.getOvertime(this.activeEmployeeId, this.overviewYear)
                 this.yearlyMonths = overtime?.monthly || []
                 this.carryoverMinutes = overtime?.carryoverMinutes || 0
                 this.payoutMinutes = overtime?.payoutMinutes || 0
-                this.payouts = await OvertimePayoutService.list(this.employeeId, this.overviewYear) || []
+                this.payouts = await OvertimePayoutService.list(this.activeEmployeeId, this.overviewYear) || []
             } catch (error) {
                 console.error('Failed to load yearly overview:', error)
             }
@@ -483,7 +543,7 @@ export default {
             this.payoutSaving = true
             try {
                 await OvertimePayoutService.create(
-                    this.employeeId,
+                    this.activeEmployeeId,
                     this.overviewYear,
                     this.payoutForm.month,
                     Math.round(hours * 60),
@@ -510,10 +570,10 @@ export default {
             }
         },
         async loadStatistics() {
-            if (!this.employeeId) return
+            if (!this.activeEmployeeId) return
             try {
                 const report = await ReportService.getMonthly(
-                    this.employeeId,
+                    this.activeEmployeeId,
                     this.selectedMonth.year,
                     this.selectedMonth.month
                 )
@@ -525,9 +585,9 @@ export default {
             }
         },
         async loadVacationStats() {
-            if (!this.employeeId) return
+            if (!this.activeEmployeeId) return
             try {
-                const stats = await AbsenceService.getVacationStats(this.employeeId, this.selectedMonth.year)
+                const stats = await AbsenceService.getVacationStats(this.activeEmployeeId, this.selectedMonth.year)
                 this.vacationRemaining = stats?.remaining ?? null
                 this.vacationCarryover = stats?.carryover ?? 0
                 this.vacationTotal = stats?.total ?? null
@@ -544,8 +604,8 @@ export default {
             this.setSelectedMonth({ year: this.overviewYear, month })
         },
         downloadPdf() {
-            if (!this.employeeId) return
-            ReportService.downloadPdf(this.employeeId, this.selectedMonth.year, this.selectedMonth.month)
+            if (!this.activeEmployeeId) return
+            ReportService.downloadPdf(this.activeEmployeeId, this.selectedMonth.year, this.selectedMonth.month)
         },
         async confirmSubmitMonth() {
             const monthName = new Date(this.selectedMonth.year, this.selectedMonth.month - 1)
@@ -562,7 +622,7 @@ export default {
             }
 
             try {
-                const result = await TimeEntryService.submitMonth(this.employeeId, this.selectedMonth.year, this.selectedMonth.month)
+                const result = await TimeEntryService.submitMonth(this.activeEmployeeId, this.selectedMonth.year, this.selectedMonth.month)
                 showSuccess(this.t('worktime', '{count} Einträge wurden eingereicht.', { count: result.submitted }))
                 await this.loadData()
             } catch (error) {
@@ -672,6 +732,28 @@ export default {
     font-size: 14px;
     font-weight: 600;
     color: var(--wt-vacation);
+}
+
+.employee-select {
+    min-width: 220px;
+}
+
+.other-employee-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--color-primary-element-light, var(--color-background-hover));
+    border: 1px solid var(--color-primary-element);
+    border-radius: var(--border-radius);
+    padding: 8px 15px;
+    margin-bottom: 16px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-primary-element);
+}
+
+.other-employee-banner span {
+    flex: 1;
 }
 
 .zlayout {

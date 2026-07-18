@@ -31,9 +31,20 @@ class TimeEntryService {
         private AbsenceMapper $absenceMapper,
         private AuditLogService $auditLogService,
         private NotificationService $notificationService,
+        private PermissionService $permissionService,
         private LoggerInterface $logger,
         private IL10N $l,
     ) {
+    }
+
+    /**
+     * Admin/HR may edit or delete entries that are already submitted (before
+     * approval), e.g. to correct another employee's month without the
+     * reject/resubmit roundtrip. Approved entries stay locked for everyone
+     * (use the reopen flow).
+     */
+    private function canEditSubmitted(string $currentUserId): bool {
+        return $currentUserId !== '' && $this->permissionService->canManageEmployees($currentUserId);
     }
 
     /**
@@ -186,8 +197,9 @@ class TimeEntryService {
             throw ValidationException::fromSingleError('status', 'Cannot edit approved time entries');
         }
 
-        // Cannot edit submitted entries (awaiting approval; HR uses reopen/reject)
-        if ($entry->getStatus() === TimeEntry::STATUS_SUBMITTED) {
+        // Cannot edit submitted entries (awaiting approval) — except Admin/HR,
+        // who may correct entries before approval; the entry stays submitted.
+        if ($entry->getStatus() === TimeEntry::STATUS_SUBMITTED && !$this->canEditSubmitted($currentUserId)) {
             throw ValidationException::fromSingleError('status', 'Cannot edit submitted time entries');
         }
 
@@ -229,8 +241,9 @@ class TimeEntryService {
             throw new ForbiddenException('Cannot delete approved time entries');
         }
 
-        // Cannot delete submitted entries (awaiting approval; HR uses reopen/reject)
-        if ($entry->getStatus() === TimeEntry::STATUS_SUBMITTED) {
+        // Cannot delete submitted entries (awaiting approval) — except Admin/HR,
+        // who may correct entries before approval.
+        if ($entry->getStatus() === TimeEntry::STATUS_SUBMITTED && !$this->canEditSubmitted($currentUserId)) {
             throw new ForbiddenException('Cannot delete submitted time entries');
         }
 
